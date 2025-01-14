@@ -1,4 +1,33 @@
 import pymatgen.core as pmg
+import re
+from nanodesclib.assign_class_patterns import *
+
+
+def assign_class(text):
+    rules = [
+        (comp, Composite),
+        (metal, Metal),
+        (metal_ox, MetalOxide),
+        (salt, Salt),
+        (mix_ox, ComplexOxide),
+        (bime, BiMetal),
+        (mix_salt, ComplexSalt),
+        (trme, TriMetal),
+        (me_hydrox, MetalHydroxide),
+        (nonmetal, NonMetal),
+        (carbide, Carbide),
+        (qme, TetraMetal),
+        (nitride, Nitride),
+        (phosphide, Phosphide),
+        (nonmetal_compound, NonmetalCompound),
+        (pentame, PentaMetal)
+    ]
+
+    for pattern, cls in rules:
+        if re.fullmatch(pattern, text.strip()):
+            return cls(text.strip())
+
+    return 'Other'
 
 
 class Metal:

@@ -1,5 +1,4 @@
-from nanodesclib.assign_class import *
-
+from nanodesclib.classes import *
 
 assert assign_class('Au2.0O@PdCl2')._type == 'coreshell'
 assert assign_class('Au2.0O-PdCl2')._type == 'composite'
@@ -16,6 +15,7 @@ assert assign_class('Fe4AgPt0.2W0.01')._type == 'tetrametal'
 
 print('Class Au2.0O@PdCl2:', CoreShell('Au2.0O@PdCl2'))
 print('Au2.0O@PdCl2 consists of:', CoreShell('Au2.0O@PdCl2').consist())
+print('Au2.0O consists of:', MetalOxide('Au2.0O').consist())
 print(CoreShell('Au2.0O@PdCl2').formula)
 print(CoreShell('Au2.0O@PdCl2')._type)
 print(assign_class('Mn0.34Fe0.66Fe2O4'))

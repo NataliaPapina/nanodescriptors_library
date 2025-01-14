@@ -1,6 +1,3 @@
-import re
-from nanodesclib.classes import *
-
 Alkali_Metals = 'Li|Na|K|Rb|Cs|Fr'
 Alkaline_Earth_Metals = 'Be|Mg|Ca|Sr|Ba|Ra'
 Transition_Metals = 'La|Ce|Pr|Nd|Pm|Sm|Eu|Gd|Tb|Dy|Ho|Er|Tm|Yb|Lu|Ac|Th|Pa|U|Np|Pu|Am|Cm|Bk|Cf|Es|Fm|Md|No|Lr|Sc|Y|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Zr|Nb|Mo|Tc|Ru|Rh|Pd|Ag|Cd|Hf|Ta|W|Re|Os|Ir|Pt|Au|Hg|Rf|Db|Sg|Bh|Hs|Mt|Ds|Rg|Cn'
@@ -53,30 +50,3 @@ nitride = r'\(?' + f'({All_metals})' + num + 'N' + num + r'\)?'
 phosphide = r'\(?' + f'({All_metals})' + num + 'P' + num + r'\)?'
 
 comp = r'[\(\)]?\w+[.,\(\)]?([\w.,\(\)]?)+(-|/|–|@)[\(\)]?\w+[.,\(\)]?([\w.,\(\)]?)+(((-|/|–|@)[\(\)]?\w+[.,\(\)]?([\w.,\(\)]?)+)?)+\b'
-
-
-def assign_class(text):
-    rules = [
-        (comp, Composite),
-        (metal, Metal),
-        (metal_ox, MetalOxide),
-        (salt, Salt),
-        (mix_ox, ComplexOxide),
-        (bime, BiMetal),
-        (mix_salt, ComplexSalt),
-        (trme, TriMetal),
-        (me_hydrox, MetalHydroxide),
-        (nonmetal, NonMetal),
-        (carbide, Carbide),
-        (qme, TetraMetal),
-        (nitride, Nitride),
-        (phosphide, Phosphide),
-        (nonmetal_compound, NonmetalCompound),
-        (pentame, PentaMetal)
-    ]
-
-    for pattern, cls in rules:
-        if re.fullmatch(pattern, text.strip()):
-            return cls(text.strip())
-
-    return 'Other'

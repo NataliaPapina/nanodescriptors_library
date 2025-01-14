@@ -1,6 +1,6 @@
 import pandas as pd
 from EDA import DataAnalyzer
-from nanodesclib.assign_class import *
+from nanodesclib.classes import *
 
 df = pd.read_csv('SAR_raw_data.csv')
 
