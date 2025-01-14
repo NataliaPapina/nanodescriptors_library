@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from EDA import DataAnalyzer
-from nanodesclib.classes import *
+from nanodesclib.assign_class import *
 import os
 
 df = pd.read_csv('nanozymes.csv')

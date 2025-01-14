@@ -1,6 +1,6 @@
 import pandas as pd
 from EDA import DataAnalyzer
-from nanodesclib.classes import *
+from nanodesclib.assign_class import *
 
 df = pd.read_csv('MRI_raw_data.csv')
 

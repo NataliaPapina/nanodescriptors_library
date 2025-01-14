@@ -1,4 +1,4 @@
-from nanodesclib.classes import *
+from nanodesclib.assign_class import *
 
 
 assert assign_class('Au2.0O@PdCl2')._type == 'coreshell'

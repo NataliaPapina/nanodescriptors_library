@@ -5,7 +5,7 @@ from plotly.subplots import make_subplots
 from matplotlib import pyplot as plt
 import io
 from PIL import Image
-from nanodesclib.classes import *
+from nanodesclib.assign_class import *
 
 
 colors = ['#0000FF', '#0AFFFF', '#22CE83', '#FFFF33', '#EB5406', '#F98B88', '#2B1B17', '#C4AEAD', '#D462FF', '#FAF0DD',
