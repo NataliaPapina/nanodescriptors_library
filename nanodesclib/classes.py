@@ -1,6 +1,28 @@
 import pymatgen.core as pmg
 import re
 from nanodesclib.assign_class_patterns import *
+from pymatgen.core import Composition
+from itertools import chain
+
+def normalize_formula(formula):
+
+    if not formula or not isinstance(formula, str):
+        return []
+
+    formula = formula.replace('\xa0', '').replace('–', '-').replace('−', '-').strip()
+
+    parts = re.split(r'[@\-/]', formula)
+
+    cleaned = []
+    for part in parts:
+        part = part.strip()
+        try:
+            _ = Composition(part)
+            cleaned.append(part)
+        except:
+            continue
+
+    return cleaned
 
 
 def assign_class(text):
@@ -35,10 +57,10 @@ class Metal:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
+        self.core = self.formula
 
     def consist(self):
-        return self.core
+        return self.formula
 
 
 class MetalOxide:
@@ -46,7 +68,7 @@ class MetalOxide:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
+        self.core = self.formula
 
     def consist(self):
         return self.formula
@@ -124,14 +146,8 @@ class CoreShell:
         self.formula = formula
 
     def consist(self):
-        composition = dict()
-        c = 1
         content = self.formula.split('@')
-        composition['core'] = assign_class(content[0]).consist()
-        for i in content[1:]:
-            composition['shell_'+str(c)] = assign_class(i).consist()
-            c += 1
-        return composition
+        return list(chain.from_iterable(normalize_formula(x) for x in content))
 
 
 class Composite(CoreShell):
@@ -144,26 +160,16 @@ class Composite(CoreShell):
 
     def consist(self):
         if '@' in self.formula:
-            composition = super().consist()
+            return super().consist()
+
+        if '/' in self.formula:
+            content = self.formula.split('/')
+        elif '-' in self.formula:
+            content = self.formula.split('-')
         else:
-            composition = dict()
-            c = 1
-            if '/' in self.formula:
-                content = self.formula.split('/')
-                for i in content:
-                    composition['compound_'+str(c)] = assign_class(i).consist()
-                    c += 1
-            elif '-' in self.formula:
-                content = self.formula.split('-')
-                for i in content:
-                    composition['compound_'+str(c)] = assign_class(i).consist()
-                    c += 1
-            else:
-                content = self.formula.split('–')
-                for i in content:
-                    composition['compound_'+str(c)] = assign_class(i).consist()
-                    c += 1
-        return composition
+            content = self.formula.split('–')
+
+        return list(chain.from_iterable(normalize_formula(x) for x in content))
 
 
 class ComplexOxide:
