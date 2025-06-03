@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from typing import List, Optional, Literal
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, OrdinalEncoder
 from sklearn.impute import KNNImputer
@@ -9,7 +10,7 @@ class DataPreprocessor:
         self,
         target_column: str,
         columns_to_drop: Optional[List[str]] = None,
-        drop_nan_threshold: float = 0.95,
+        drop_nan_threshold: float = 0.5,
         encoding: Literal['onehot', 'ordinal', 'none'] = 'onehot',
         scaling: Literal['standard', 'minmax', 'robust', 'none'] = 'standard',
         nan_strategy: Literal['mean', 'median', 'mode', 'drop'] = 'mean',
@@ -27,17 +28,16 @@ class DataPreprocessor:
         self.scaler = None
         self.removed_columns = []
 
-    def _convert_special_strings_to_nan_or_zero(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _convert_special_strings_to_nan(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         for col in df.select_dtypes(include=['object']).columns:
             mask = df[col].isin(['-', '—', 'no'])
             if mask.any():
+                df.loc[mask, col] = np.nan
                 try:
-                    df.loc[mask, col] = '0'
                     df[col] = df[col].astype(float)
                 except Exception:
-                    df[col] = df[col].replace(['-', '—', 'no'], pd.NA)
-                    df[col] = df[col].fillna(df[col].mode()[0])
+                    pass
         return df
 
     def _fill_missing(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -93,7 +93,7 @@ class DataPreprocessor:
 
         df.dropna(subset=[self.target_column], inplace=True)
 
-        df = self._convert_special_strings_to_nan_or_zero(df)
+        df = self._convert_special_strings_to_nan(df)
 
         for col in df.columns:
             if df[col].isna().mean() > self.drop_nan_threshold:
@@ -135,7 +135,7 @@ class DataPreprocessor:
         df = df.copy()
         df.drop(columns=self.removed_columns, errors="ignore", inplace=True)
         df.dropna(subset=[self.target_column], inplace=True)
-        df = self._convert_special_strings_to_nan_or_zero(df)
+        df = self._convert_special_strings_to_nan(df)
         df = self._fill_missing(df)
 
         cat_cols = df.select_dtypes(include=["object", "category"]).columns.drop(self.target_column, errors="ignore")
@@ -150,16 +150,3 @@ class DataPreprocessor:
 
         df = self._final_fill_missing(df)
         return df
-
-
-from Calculation_to_dataframe import result
-preprocessor = DataPreprocessor(
-    target_column="Km, mM",
-    drop_nan_threshold=0.2,
-    columns_to_drop=['#', 'link'],
-    use_knn_imputer=True,
-    encoding="ordinal",
-    scaling="robust"
-)
-clean_df = preprocessor.fit_transform(result)
-print(clean_df.info())
