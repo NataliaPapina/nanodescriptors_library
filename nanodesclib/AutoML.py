@@ -100,17 +100,7 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
 
     def fit(self, X, y):
 
-        X.columns = [str(col).replace('"', '')
-                     .replace("'", '')
-                     .replace('\n', ' ')
-                     .replace('\t', ' ')
-                     .replace('{', '')
-                     .replace('}', '')
-                     .replace('[', '')
-                     .replace(']', '')
-                     .replace(':', '_')
-                     .replace(',', '_')
-                     for col in X.columns]
+        X = self.clean_feature_names(X)
 
         if self.pre_filter:
             X = self._pre_filter(X)
@@ -177,10 +167,19 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X):
+        X = self.clean_feature_names(X)
+
+        if hasattr(self, "feature_names"):
+            X = X[[col for col in self.feature_names if col in X.columns]]
+            for col in self.feature_names:
+                if col not in X.columns:
+                    X[col] = 0.0
+            X = X[self.feature_names]
+
         X_scaled = self._scale(X)
+
         if self.selected_features is not None and len(self.selected_features) > 0:
-            feature_list = list(self.feature_names)
-            idxs = [feature_list.index(f) for f in self.selected_features]
+            idxs = self.feature_names.get_indexer(self.selected_features)
             return self.model.predict(np.asarray(X_scaled)[:, idxs])
         return self.model.predict(np.asarray(X_scaled))
 
