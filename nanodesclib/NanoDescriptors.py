@@ -1,5 +1,7 @@
 import pymatgen.core as pmg
 from chemlib import Element
+import pubchempy as pcp
+import inspect
 import pandas as pd
 import numpy as np
 from nanodesclib.classes import *
@@ -12,13 +14,19 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors
 from rdkit.Chem import rdMolDescriptors
 from pymatgen.analysis.local_env import CrystalNN
+import numbers
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning, module="pymatgen")
 
 current_path = Path(__file__).parent.resolve()
 csv_file_path = current_path / "reference/polarizabilities.csv"
 polarizabilities = pd.read_csv(csv_file_path)
 
 
-class Descriptors:
+class NanoDescriptors:
+    cas_cache = {}
+    thermo_cache = {}
 
     def __init__(self, formula, smiles=None, structure=None):
         self.formula = formula
@@ -126,23 +134,114 @@ class Descriptors:
             return result
         return {}
 
-    def thermo_descriptors(self):
-        useful_keys = {
-            'Tboil', 'Tmelting', 'Tc', 'Pc', 'Vc', 'Zc', 'omega', 'Hf', 'S0g', 'GWP', 'ODP',
-            'logP', 'RI', 'dipole', 'enthalpy_of_formation', 'critical_temperature',
-            'thermal_conductivity', 'density', 'surface_tension', 'viscosity', 'heat_capacity'
+    def atomic_mechanical_descriptors(self):
+        descriptor_names = [
+            'atomic_number', 'atomic_mass', 'electron_affinity', 'first_ionization_energy',
+            'atomic_radius_calculated', 'van_der_waals_radius', 'electrical_resistivity',
+            'velocity_of_sound', 'reflectivity', 'refractive_index', 'poissons_ratio',
+            'molar_volume', 'thermal_conductivity', 'boiling_point', 'melting_point',
+            'critical_temperature', 'superconduction_temperature', 'liquid_range',
+            'bulk_modulus', 'youngs_modulus', 'brinell_hardness', 'rigidity_modulus',
+            'mineral_hardness', 'vickers_hardness', 'density_of_solid',
+            'coefficient_of_linear_thermal_expansion'
+        ]
+
+        descriptor_sums = {name: 0.0 for name in descriptor_names}
+        total_weight = 0.0
+
+        for formula in self.parts:
+            comp = self._get_composition(formula)
+            for el_symbol, amt in comp.items():
+                try:
+                    el = pmg.Element(el_symbol)
+                    weight_frac = comp.get_wt_fraction(el)
+                    total_weight += weight_frac
+                    for name in descriptor_names:
+                        val = getattr(el, name, None)
+                        if isinstance(val, numbers.Number):
+                            descriptor_sums[name] += val * weight_frac
+                except Exception as e:
+                    print(f"[WARN] Failed descriptor for element {el_symbol}: {e}")
+                    continue
+
+        averaged = {
+            f"avg_{name}": (val / total_weight if total_weight else None)
+            for name, val in descriptor_sums.items()
+        }
+        return averaged
+
+    def get_thermo_descriptors(self):
+        formulas = self.parts
+
+        try:
+            weights = [Composition(f).weight for f in formulas]
+            total_weight = sum(weights)
+            weight_fractions = [w / total_weight for w in weights]
+        except Exception:
+            weights = [1.0 for _ in formulas]
+            weight_fractions = [1.0 / len(formulas)] * len(formulas)
+
+        skip_keys = {
+            'ChemicalMetadata', 'synonyms', 'InChI', 'CAS', 'autocalc', 'PubChem', 'formula', 'MW', 'atoms',
+            'eos_in_a_box', 'Tm_sources', 'Tm_source', 'Tflash_source', 'Tautoignition_sources', 'Pt_sources',
+            'Tautoignition_source', 'TWA_sources', 'TWA_source', 'STEL_sources', 'STEL_source', 'Pt_source',
+            'Hfus_methods', 'Hfus_method', 'Tb_sources', 'Tb_source', 'Tc_methods', 'Tc_method', 'Pc_methods',
+            'Vc_methods', 'Vc_method', 'omega_methods', 'Carcinogen', 'Pc_method', 'InChI_Key', 'IUPAC_name',
+            'ID', 'omega_method', 'Tt_sources', 'Tflash_sources', 'Stockmayer_sources', 'Tt_source',
+            'Ceiling_sources', 'Ceiling_source', 'Skin_sources', 'Skin_source', 'Hfg_sources', 'Hfg_source',
+            'S0g_sources', 'S0g_source', 'dipole_sources', 'dipole_source', 'GWP_sources', 'GWP_source',
+            'ODP_sources', 'ODP_source', 'logP_sources', 'logP_source', 'RI_sources', 'RI_source',
+            'conductivity_sources', 'conductivity_source', 'name', 'Stockmayer_source', 'VaporPressure',
+            'Hf_sources', 'combustion_stoichiometry', 'elemental_reaction_data', 'VolumeGas', 'VolumeLiquid',
+            'VolumeSolid', 'HeatCapacityGas', 'HeatCapacitySolid', 'HeatCapacityLiquid', 'EnthalpyVaporization',
+            'EnthalpySublimation', 'PermittivityLiquid', 'Permittivity', 'SurfaceTension',
+            'ThermalConductivitySolid', 'ThermalConductivityGas', 'ViscosityGas', 'ThermalConductivityLiquid',
+            'SublimationPressure', 'ViscosityLiquid', '_eos_T_101325', 'eos_Tb', 'molecular_diameter_sources',
+            'molecular_diameter_source', 'LFL_sources', 'LFL_source', 'UFL_sources', 'UFL_source'
         }
 
-        def extract_thermo(formula):
+        all_keys = set()
+        part_descriptors = []
+
+        for formula, weight_fraction in zip(formulas, weight_fractions):
             try:
-                d = Chemical(formula).__dict__
-                return {f"{formula}_{k}": v for k, v in d.items() if k in useful_keys and isinstance(v, (int, float))}
-            except:
-                return {}
+                chem = Chemical(formula)
+            except Exception:
+                continue
+
+            descriptors = {}
+            for attr in dir(chem):
+                if attr.startswith('_') or attr in skip_keys:
+                    continue
+                try:
+                    value = getattr(chem, attr)
+                    if callable(value):
+                        sig = inspect.signature(value)
+                        if len(sig.parameters) > 0:
+                            continue
+                        value = value()
+                    if isinstance(value, (dict, list, tuple)):
+                        continue
+                    if isinstance(value, (int, float, str, bool, np.number)):
+                        descriptors[attr] = value
+                except Exception:
+                    continue
+
+            descriptors['weight_fraction'] = weight_fraction
+            part_descriptors.append(descriptors)
+            all_keys.update(descriptors.keys())
 
         result = {}
-        for part in self.parts:
-            result.update(extract_thermo(part))
+        for key in all_keys:
+            values = []
+            weights = []
+            for d in part_descriptors:
+                if key in d and isinstance(d[key], (int, float)):
+                    values.append(d[key])
+                    weights.append(d['weight_fraction'])
+            if values:
+                result['thermo_' + key] = np.average(values, weights=weights)
+
         return result
 
     def electronic_descriptors(self):
@@ -207,8 +306,9 @@ class Descriptors:
             'polarizability': self.polarizability()
         }
         desc.update(self.homo_lumo())
-        desc.update(self.thermo_descriptors())
+        desc.update(self.get_thermo_descriptors())
         desc.update(self.smiles_descriptors())
         desc.update(self.electronic_descriptors())
         desc.update(self.structural_descriptors())
+        desc.update(self.atomic_mechanical_descriptors())
         return desc
