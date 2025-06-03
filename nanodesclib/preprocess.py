@@ -53,7 +53,7 @@ class DataPreprocessor:
         else:
             for col in df.columns:
                 if df[col].isnull().any():
-                    if df[col].dtype.kind in 'biufc':  # numeric
+                    if df[col].dtype.kind in 'biufc':
                         if self.nan_strategy == 'mean':
                             df[col].fillna(df[col].mean(), inplace=True)
                         elif self.nan_strategy == 'median':

@@ -124,7 +124,7 @@ class NanoDescriptors:
                 if mol:
                     desc = Descriptors.CalcMolDescriptors(mol)
                     result.update({f"smiles_{i}_{k}": v for k, v in desc.items()})
-                    # Добавим геометрические, которых нет в CalcMolDescriptors
+
                     try:
                         result[f"smiles_{i}_LabuteASA"] = rdMolDescriptors.CalcLabuteASA(mol)
                         result[f"smiles_{i}_NPR1"] = rdMolDescriptors.CalcNPR1(mol)
