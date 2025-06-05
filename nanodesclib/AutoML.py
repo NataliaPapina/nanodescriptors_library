@@ -17,11 +17,23 @@ from sklearn.feature_selection import SelectFromModel
 
 
 class AutoMLPipeline(BaseEstimator, RegressorMixin):
-    def __init__(self, task='regression', pre_filter=True, correlation_threshold=0.95, max_features=None, feature_selection_method="shap", n_trials=50, scale_data=True, random_state=42):
+    def __init__(
+            self,
+            task='regression',
+            pre_filter=True,
+            correlation_threshold=0.95,
+            var_threshold=1e-5,
+            max_features=None,
+            feature_selection_method="shap",
+            n_trials=50,
+            scale_data=True,
+            random_state=42
+    ):
         self.task = task
         self.n_trials = n_trials
         self.pre_filter = pre_filter
         self.correlation_threshold = correlation_threshold
+        self.var_threshold = var_threshold
         self.max_features = max_features
         self.feature_selection_method = feature_selection_method.lower()
         self.random_state = random_state
@@ -42,7 +54,7 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
     def _pre_filter(self, X):
         X_filtered = X.copy()
 
-        selector = VarianceThreshold(threshold=1e-5)
+        selector = VarianceThreshold(threshold=self.var_threshold)
         X_filtered = pd.DataFrame(selector.fit_transform(X_filtered), columns=X.columns[selector.get_support()])
 
         corr_matrix = X_filtered.corr(method="spearman").abs()
