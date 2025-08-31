@@ -14,6 +14,7 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors
 from rdkit.Chem import rdMolDescriptors
 from pymatgen.analysis.local_env import CrystalNN
+from nanodesclib.aflow import AflowDescriptors
 import numbers
 import warnings
 
@@ -297,6 +298,52 @@ class NanoDescriptors:
                 pass
         return result
 
+    def aflow_descriptors(self):
+        formulas = self.parts
+        descriptors_list = []
+        weights = []
+
+        for formula in formulas:
+            try:
+                weight = Composition(formula).weight
+                aflow = AflowDescriptors(formula)
+                aflow.fetch()
+                desc = aflow.get_descriptors()
+                if desc:
+                    descriptors_list.append(desc)
+                    weights.append(weight)
+            except Exception as e:
+                print(f"[AFLOW WARN] {formula}: {e}")
+                continue
+
+        if not descriptors_list:
+            return {}, {}
+
+        # нормализация весов
+        weights = np.array(weights, dtype=float)
+        weights = weights / weights.sum()
+
+        all_keys = set(k for d in descriptors_list for k in d.keys())
+        averaged = {}
+
+        for key in all_keys:
+            values = []
+            ws = []
+            for d, w in zip(descriptors_list, weights):
+                val = d.get(key, None)
+                if isinstance(val, (int, float)) and not pd.isna(val):
+                    values.append(val)
+                    ws.append(w)
+            if values:
+                averaged["aflow_" + key] = np.average(values, weights=ws)
+            else:
+                # для строковых/категориальных признаков сохраним список
+                cat_vals = [d.get(key) for d in descriptors_list if isinstance(d.get(key), str)]
+                if cat_vals:
+                    averaged["aflow_" + key] = list(set(cat_vals))  # или cat_vals[0] (первое значение)
+
+        return averaged, descriptors_list
+
     def all_descriptors(self):
         desc = {
             'number_of_atoms': self.number_of_atoms(),
@@ -311,4 +358,6 @@ class NanoDescriptors:
         desc.update(self.electronic_descriptors())
         desc.update(self.structural_descriptors())
         desc.update(self.atomic_mechanical_descriptors())
+        aflow_desc, _ = self.aflow_descriptors()
+        desc.update(aflow_desc)
         return desc
