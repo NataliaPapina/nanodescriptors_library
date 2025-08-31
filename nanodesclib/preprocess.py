@@ -3,6 +3,7 @@ import numpy as np
 from typing import List, Optional, Literal
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, OrdinalEncoder
 from sklearn.impute import KNNImputer
+from category_encoders import TargetEncoder
 
 
 class DataPreprocessor:
@@ -11,7 +12,7 @@ class DataPreprocessor:
         target_column: str,
         columns_to_drop: Optional[List[str]] = None,
         drop_nan_threshold: float = 0.5,
-        encoding: Literal['onehot', 'ordinal', 'none'] = 'onehot',
+        encoding: Literal['onehot', 'ordinal', 'target', 'none'] = 'onehot',
         scaling: Literal['standard', 'minmax', 'robust', 'none'] = 'standard',
         nan_strategy: Literal['mean', 'median', 'mode', 'drop'] = 'mean',
         use_knn_imputer: bool = False
@@ -111,6 +112,9 @@ class DataPreprocessor:
         elif self.encoding == "ordinal":
             self.encoder = OrdinalEncoder()
             df[cat_cols] = self.encoder.fit_transform(df[cat_cols])
+        elif self.encoding == "target":
+            self.encoder = TargetEncoder(cols=cat_cols)
+            df[cat_cols] = self.encoder.fit_transform(df[cat_cols], df[self.target_column])
         elif self.encoding != "none":
             raise ValueError(f"Unknown encoding: {self.encoding}")
 
