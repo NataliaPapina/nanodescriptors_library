@@ -60,8 +60,8 @@ class DescriptorDatasetBuilder:
         cache = {}
 
         for idx, (f, smiles_list, struct) in enumerate(zip(self.formulas, self.smiles, self.structures)):
-            struct_str = struct.to_pretty_string() if isinstance(struct, Structure) else str(struct)
-            key = (f, tuple(smiles_list), struct_str)
+            struct_str = struct.to_pretty_string() if isinstance(struct, Structure) else None
+            key = (f, tuple(smiles_list) if smiles_list else None, struct_str)
 
             if key in cache:
                 desc = cache[key]
