@@ -8,12 +8,13 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Ridge, Lasso
+from sklearn.linear_model import Ridge, Lasso, ElasticNet
 from sklearn.svm import SVR
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.feature_selection import SelectFromModel
+from catboost import CatBoostRegressor
 
 
 class AutoMLPipeline(BaseEstimator, RegressorMixin):
@@ -27,7 +28,7 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
             feature_selection_method="shap",
             n_trials=50,
             scale_data=True,
-            random_state=42
+            random_state=0
     ):
         self.task = task
         self.n_trials = n_trials
@@ -72,7 +73,11 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
         return self.scaler.transform(X)
 
     def _objective(self, trial, X, y):
-        model_name = trial.suggest_categorical("model", ["xgboost", "lightgbm", "random_forest", "lasso", "ridge"])
+        model_name = trial.suggest_categorical(
+            "model",
+            ["xgboost", "lightgbm", "random_forest", "lasso", "ridge", "svr", "catboost", "elasticnet"]
+        )
+
         model = self._create_model(model_name, trial)
         pipeline = Pipeline([
             ("regressor", model)
@@ -81,23 +86,39 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
         score = cross_val_score(pipeline, X_scaled, y, scoring="neg_root_mean_squared_error", cv=3).mean()
         return score
 
+
     def _create_model(self, name, trial_or_params):
         if isinstance(trial_or_params, dict):
             p = trial_or_params
         else:
             trial = trial_or_params
-            name = trial.suggest_categorical("model", ["xgboost", "lightgbm", "random_forest", "lasso", "ridge"])
+            name = trial.suggest_categorical(
+                "model",
+                ["xgboost", "lightgbm", "random_forest", "lasso", "ridge", "svr", "catboost", "elasticnet"]
+            )
             p = {}
 
             if name in ["xgboost", "lightgbm"]:
-                p["n_estimators"] = trial.suggest_int("n_estimators", 50, 300)
-                p["max_depth"] = trial.suggest_int("max_depth", 3, 10)
+                p["n_estimators"] = trial.suggest_int("n_estimators", 100, 1000)
+                p["max_depth"] = trial.suggest_int("max_depth", 3, 12)
                 p["learning_rate"] = trial.suggest_float("lr", 1e-3, 0.3, log=True)
             elif name == "random_forest":
-                p["n_estimators"] = trial.suggest_int("n_estimators", 50, 300)
-                p["max_depth"] = trial.suggest_int("max_depth", 3, 15)
+                p["n_estimators"] = trial.suggest_int("n_estimators", 100, 1000)
+                p["max_depth"] = trial.suggest_int("max_depth", 3, 20)
+                p["min_samples_split"] = trial.suggest_int("min_samples_split", 2, 10)
             elif name in ["lasso", "ridge"]:
                 p["alpha"] = trial.suggest_float("alpha", 1e-4, 10.0, log=True)
+            elif name == "elasticnet":
+                p["alpha"] = trial.suggest_float("alpha", 1e-4, 10.0, log=True)
+                p["l1_ratio"] = trial.suggest_float("l1_ratio", 0.0, 1.0)
+            elif name == "svr":
+                p["C"] = trial.suggest_float("C", 1e-2, 100.0, log=True)
+                p["epsilon"] = trial.suggest_float("epsilon", 1e-3, 1.0, log=True)
+                p["kernel"] = trial.suggest_categorical("kernel", ["linear", "rbf", "poly"])
+            elif name == "catboost":
+                p["iterations"] = trial.suggest_int("iterations", 200, 1000)
+                p["depth"] = trial.suggest_int("depth", 4, 10)
+                p["learning_rate"] = trial.suggest_float("learning_rate", 1e-3, 0.3, log=True)
 
         if name == "xgboost":
             return XGBRegressor(**p, random_state=self.random_state, verbosity=0)
@@ -109,6 +130,12 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
             return Lasso(**p, random_state=self.random_state)
         elif name == "ridge":
             return Ridge(**p, random_state=self.random_state)
+        elif name == "elasticnet":
+            return ElasticNet(**p, random_state=self.random_state)
+        elif name == "svr":
+            return SVR(**p)
+        elif name == "catboost":
+            return CatBoostRegressor(**p, random_state=self.random_state, verbose=0)
 
     def fit(self, X, y):
 
@@ -131,7 +158,7 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
 
         try:
             if self.feature_selection_method == "shap":
-                print("[INFO] Using SHAP for feature selection...")
+                print("Using SHAP for feature selection...")
                 if hasattr(self.model, "predict_proba") or isinstance(self.model, (
                 XGBRegressor, LGBMRegressor, RandomForestRegressor)):
                     explainer = shap.Explainer(self.model, X_scaled)
@@ -153,7 +180,7 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
                 self._explainer = explainer
 
             elif self.feature_selection_method == "model":
-                print("[INFO] Using SelectFromModel for feature selection...")
+                print("Using SelectFromModel for feature selection...")
                 from sklearn.feature_selection import SelectFromModel
                 selector = SelectFromModel(self.model, threshold="median")
                 selector.fit(X_scaled, y)
@@ -169,12 +196,12 @@ class AutoMLPipeline(BaseEstimator, RegressorMixin):
 
 
         except Exception as e:
-            print(f"[WARN] SHAP fallback: {e}")
+            print(f"SHAP fallback: {e}")
             self.selected_features = self.feature_names
             self.model.fit(X_scaled, y)
 
-        print(f"[INFO] Лучшая модель: {self.best_model_name}")
-        print(f"[INFO] Параметры модели: {self.best_params}")
+        print(f"Best model: {self.best_model_name}")
+        print(f"Parameters: {self.best_params}")
 
         return self
 
