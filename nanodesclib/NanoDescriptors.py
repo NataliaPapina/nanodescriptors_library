@@ -319,7 +319,6 @@ class NanoDescriptors:
         if not descriptors_list:
             return {}, {}
 
-        # нормализация весов
         weights = np.array(weights, dtype=float)
         weights = weights / weights.sum()
 
@@ -337,12 +336,92 @@ class NanoDescriptors:
             if values:
                 averaged["aflow_" + key] = np.average(values, weights=ws)
             else:
-                # для строковых/категориальных признаков сохраним список
                 cat_vals = [d.get(key) for d in descriptors_list if isinstance(d.get(key), str)]
                 if cat_vals:
-                    averaged["aflow_" + key] = list(set(cat_vals))  # или cat_vals[0] (первое значение)
+                    averaged["aflow_" + key] = list(set(cat_vals))
 
         return averaged, descriptors_list
+
+    def E_MSM(self):
+        """sum of electrons of the metals and semimetals"""
+        e_msm = 0
+
+        for part in self.parts:
+            try:
+                comp = Composition(part)
+                for el in comp.elements:
+                    if el.is_metal or el.is_metalloid:
+                        e_msm += el.n_electrons * comp[el]
+            except Exception as e:
+                print(f"Warning in E_MSM for part '{part}': {e}")
+                continue
+
+        return {'E_MSM': e_msm}
+
+    def sum_metal_ionization_energy(self):
+        """sum of metal ionization energies"""
+        smi_en = 0
+
+        for part in self.parts:
+            try:
+                comp = Composition(part)
+                for el in comp.elements:
+                    if el.is_metal and el.ionization_energy:
+                        smi_en += el.ionization_energy * comp[el]
+            except Exception as e:
+                print(f"Warning in sum_metal_ionization_energy for part '{part}': {e}")
+                continue
+
+        return {'sum_metal_ionization_energy': smi_en}
+
+    def sum_metal_elneg(self):
+        """sum of metal electronegativity"""
+        metal_elneg_sum = 0
+
+        for part in self.parts:
+            try:
+                comp = Composition(part)
+                for el in comp.elements:
+                    if el.is_metal:
+                        metal_elneg_sum += el.X * comp[el]
+            except Exception as e:
+                print(f"Warning in sum_metal_elneg for part '{part}': {e}")
+                continue
+
+        if metal_elneg_sum > 0:
+            return {'sum_metal_elneg': metal_elneg_sum}
+        else:
+            return {}
+
+    def sum_metal_elneg_div_ox(self):
+        """sum of metal electronegativity divided by oxygen atoms"""
+        formula_type = self.compound_class._type
+
+        if formula_type not in ['metal_oxide', 'complex_metal_oxide', 'composite', 'coreshell']:
+            return {}
+
+        total_oxygen = 0
+        metal_elneg_sum = 0
+
+        for part in self.parts:
+            try:
+                comp = Composition(part)
+                n_ox = comp.get('O', 0)
+                total_oxygen += n_ox
+
+                for el in comp.elements:
+                    if el.is_metal:
+                        metal_elneg_sum += el.X * comp[el]
+            except Exception as e:
+                print(f"Warning in sum_metal_elneg_div_ox for part '{part}': {e}")
+                continue
+
+        if total_oxygen <= 0:
+            return {}
+
+        smednox = metal_elneg_sum / total_oxygen
+        return {'sum_metal_elneg_div_ox': smednox, 'num_oxygen': total_oxygen}
+
 
     def all_descriptors(self):
         desc = {
@@ -358,6 +437,10 @@ class NanoDescriptors:
         desc.update(self.electronic_descriptors())
         desc.update(self.structural_descriptors())
         desc.update(self.atomic_mechanical_descriptors())
+        desc.update(self.E_MSM())
+        desc.update(self.sum_metal_ionization_energy())
+        desc.update(self.sum_metal_elneg())
+        desc.update(self.sum_metal_elneg_div_ox())
         aflow_desc, _ = self.aflow_descriptors()
         desc.update(aflow_desc)
         return desc
