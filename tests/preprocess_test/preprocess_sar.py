@@ -2,7 +2,7 @@ import nanodesclib.classes
 from nanodesclib.Calculation_to_dataframe import *
 from nanodesclib.preprocess import *
 import pubchempy as pcp
-import pymatgen as pmg
+from pymatgen.core import Composition
 
 my_df = pd.read_csv(r'C:\Users\Public\Documents\nanomaterials_descriptors_library\tests\EDA\SAR_raw_data.csv')
 
@@ -10,9 +10,18 @@ my_df['smiles_1'] = None
 my_df['smiles_2'] = None
 my_df['smiles_3'] = None
 
+my_df[my_df['np_core'] == 'Co1Fe2O4@N-(trimethoxysilylpropyl)-ethylenediaminetriacetate: trimethoxysilylpropyl']['np_shell_1'] = '(trimethoxysilylpropyl)-ethylenediaminetriacetate'
+my_df[my_df['np_core'] == 'Co1Fe2O4@N-(trimethoxysilylpropyl)-ethylenediaminetriacetate: trimethoxysilylpropyl']['np_core'] = 'Co1Fe2O4@N'
+
+my_df[my_df['np_core'] == 'Mn1Fe2O4@N-(trimethoxysilylpropyl)-ethylenediaminetriacetate: trimethoxysilylpropyl']['np_shell_1'] = '(trimethoxysilylpropyl)-ethylenediaminetriacetate'
+my_df[my_df['np_core'] == 'Mn1Fe2O4@N-(trimethoxysilylpropyl)-ethylenediaminetriacetate: trimethoxysilylpropyl']['np_core'] = 'Mn1Fe2O4@N'
+
+my_df[my_df['np_core'] == 'Ni1Fe2O4@N-(trimethoxysilylpropyl)-ethylenediaminetriacetate: trimethoxysilylpropyl']['np_shell_1'] = '(trimethoxysilylpropyl)-ethylenediaminetriacetate'
+my_df[my_df['np_core'] == 'Ni1Fe2O4@N-(trimethoxysilylpropyl)-ethylenediaminetriacetate: trimethoxysilylpropyl']['np_core'] = 'Ni1Fe2O4@N'
+
 for i in my_df['np_shell_1'].index:
     try:
-        [pmg.Composition(j) for j in nanodesclib.classes.assign_class(my_df.loc[i, 'np_shell_1']).consist()]
+        [Composition(j) for j in nanodesclib.classes.assign_class(my_df.loc[i, 'np_shell_1']).consist()]
         my_df.loc[i, 'np_core'] = '@'.join([my_df.loc[i, 'np_core'], my_df.loc[i, 'np_shell_1']])
     except:
         try:
@@ -22,7 +31,7 @@ for i in my_df['np_shell_1'].index:
 
 for j in my_df['np_shell_2'].index:
     try:
-        [pmg.Composition(j) for i in nanodesclib.classes.assign_class(my_df.loc[j, 'np_shell_2']).consist()]
+        [Composition(j) for i in nanodesclib.classes.assign_class(my_df.loc[j, 'np_shell_2']).consist()]
         my_df.loc[j, 'np_core'] = '@'.join([my_df.loc[j, 'np_core'], my_df.loc[j, 'np_shell_2']])
     except:
         try:
@@ -32,7 +41,7 @@ for j in my_df['np_shell_2'].index:
 
 for j in my_df['np_shell_3'].index:
     try:
-        [pmg.Composition(i) for i in nanodesclib.classes.assign_class(my_df.loc[j, 'np_shell_3']).consist()]
+        [Composition(i) for i in nanodesclib.classes.assign_class(my_df.loc[j, 'np_shell_3']).consist()]
         my_df.loc[j, 'np_core'] = '@'.join([my_df.loc[j, 'np_core'], my_df.loc[j, 'np_shell_3']])
     except:
         try:
@@ -46,11 +55,11 @@ result.to_csv('df_sar.csv', index=False)
 
 preprocessor = DataPreprocessor(
     target_column="htherm_sar",
-    drop_nan_threshold=0.2,
+    drop_nan_threshold=0.3,
     columns_to_drop=['paper_doi', 'paper_files', 'paper_comment', 'syn_description'],
     use_knn_imputer=True,
     encoding="target",
-    scaling="minmax"
+    scaling="none"
 )
 clean_df = preprocessor.fit_transform(result)
 
