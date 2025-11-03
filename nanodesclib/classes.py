@@ -17,8 +17,8 @@ def normalize_formula(formula):
     for part in parts:
         part = part.strip()
         try:
-            _ = Composition(part)
-            cleaned.append(part)
+            if len(re.split(r'[@\-/]', part)) < 2:
+                cleaned.append(part)
         except:
             continue
 

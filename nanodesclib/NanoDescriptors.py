@@ -5,6 +5,9 @@ import inspect
 import pandas as pd
 import numpy as np
 from nanodesclib.classes import *
+from nanodesclib.ElementDescriptors import *
+from nanodesclib.wt_fraction import *
+from nanodesclib.el_amt_dict import *
 from pymatgen.core import molecular_orbitals
 from pathlib import Path
 from thermo.chemical import Chemical
@@ -30,20 +33,115 @@ class NanoDescriptors:
     thermo_cache = {}
 
     def __init__(self, formula, smiles=None, structure=None):
-        self.formula = formula
-        self.smiles = smiles
+        inorganic_formula, organic_smiles = self.extract_organic_components(formula)
+
+        if inorganic_formula:
+            self.formula = inorganic_formula
+        else:
+            self.formula = formula
+        all_smiles = []
+        if smiles:
+            if isinstance(smiles, list):
+                all_smiles.extend(smiles)
+            else:
+                all_smiles.append(smiles)
+        all_smiles.extend(organic_smiles)
+
+        self.smiles = all_smiles if all_smiles else None
         self.structure = structure
-        self.compound_class = assign_class(formula)
+
+        self.compound_class = assign_class(self.formula)
         try:
             if self.compound_class._type not in ['composite', 'coreshell']:
-                self.parts = [formula]
+                self.parts = [self.formula]
             else:
                 self.parts = self.compound_class.consist()
         except:
-            self.parts = [formula]
+            self.parts = [self.formula]
 
-    def _get_composition(self, formula):
-        return pmg.Composition(formula)
+        self.structure = structure
+
+    def is_inorganic_formula(self, formula):
+        """
+        Проверяет, является ли формула неорганической
+        """
+        # Простые критерии для неорганических формул:
+        # - содержит только элементы, цифры, скобки, точки
+        # - не содержит типичных органических паттернов
+        clean_formula = re.sub(r'[-/@]', '', formula)
+
+        # Паттерн для неорганических формул: элементы + цифры + точки
+        inorganic_pattern = r'^([A-Z][a-z]?(\d*\.?\,?\d*)*)+$'
+
+        if not re.match(inorganic_pattern, clean_formula):
+            return False
+
+        if len(formula) > 30:
+            return False
+
+        try:
+            elements = get_el_amt_dict(clean_formula)
+            return len(elements) > 0
+        except:
+            return False
+
+    def extract_organic_components(self, formula):
+        """
+        Разделяет формулу на неорганическую часть и органические компоненты
+        Возвращает (inorganic_part, organic_smiles_list)
+        """
+        if self.is_inorganic_formula(formula):
+            return formula, []
+
+        parts = re.split(r'[@]', formula)
+
+        inorganic_parts = []
+        organic_smiles_list = []
+
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+
+            if self.is_inorganic_formula(part):
+                inorganic_parts.append(part)
+            else:
+                smiles = self.get_smiles_from_name(part)
+                if smiles:
+                    organic_smiles_list.append(smiles)
+                else:
+                    print(f"Warning: Could not find SMILES for: {part}")
+
+        inorganic_part = '@'.join(inorganic_parts) if inorganic_parts else None
+        return inorganic_part, organic_smiles_list
+
+    def get_smiles_from_name(self, name):
+        """
+        Получает SMILES из названия через pubchempy
+        """
+        try:
+            compounds = pcp.get_compounds(name, namespace='name')
+            if compounds:
+                return compounds[0].canonical_smiles
+        except:
+            pass
+
+        try:
+                compounds = pcp.get_compounds(name, namespace='synonym')
+                if compounds:
+                    return compounds[0].canonical_smiles
+        except:
+                pass
+
+        if name.startswith('PEG-'):
+            try:
+                compounds = pcp.get_compounds('polyethylene glycol', namespace='name')
+                if compounds:
+                    return compounds[0].canonical_smiles
+            except:
+                pass
+
+        return None
 
     def _apply(self, func):
         results = [func(p) for p in self.parts]
@@ -52,25 +150,65 @@ class NanoDescriptors:
         return sum(results)
 
     def number_of_atoms(self):
-        return self._apply(lambda f: self._get_composition(f).num_atoms)
+        return sum(get_el_amt_dict(self.formula).values())
+
+    def material_type(self):
+        return assign_class(self.formula)._type
 
     def molecular_weight(self):
-        return self._apply(lambda f: self._get_composition(f).weight)
+        return formula_mass(self.formula)
+
+    def _get_composition(self, formula):
+        """Безопасное получение состава с обработкой составных формул"""
+        try:
+            # Пробуем стандартный pymatgen для простых формул
+            return pmg.Composition(formula)
+        except:
+            # Для составных формул используем наш парсер
+            elements = get_el_amt_dict(formula)
+            # Создаем Composition из словаря элементов
+            return pmg.Composition(elements)
 
     def average_electronegativity(self):
-        return self._apply(lambda f: self._get_composition(f).average_electroneg)
+        def calc_electroneg(formula):
+            elements = get_el_amt_dict(formula)
+            total_atoms = sum(elements.values())
+            if total_atoms == 0:
+                return 0
+            electroneg_sum = 0
+            valid_elements = 0
+            for el, amt in elements.items():
+                try:
+                    # Используем ElementDescriptor для получения электроотрицательности
+                    ed = ElementDescriptor(el)
+                    electroneg = ed.data.get('Pauling electronegativity')
+                    if electroneg is not None:
+                        electroneg_sum += electroneg * amt
+                        valid_elements += amt
+                except:
+                    print(f"Warning: Could not get electronegativity for {el}: {e}")
+                    continue
+            return electroneg_sum / valid_elements if valid_elements > 0 else 0
+
+        return self._apply(calc_electroneg)
 
     def average_electron_affinity(self):
-        def calc(formula):
-            comp = self._get_composition(formula)
-            elements = comp.as_dict()
-            result = 0
-            for el in elements:
-                e = pmg.Element(el)
-                weight_fraction = comp.get_wt_fraction(e)
-                result += (e.electron_affinity or 0) * weight_fraction
-            return result
-        return self._apply(calc)
+        elements = get_el_amt_dict(self.formula)
+        result = 0
+        total_weight = 0
+        for el in elements:
+            try:
+                weight_fraction = get_wt_fraction(self.formula, el)
+                ed = ElementDescriptor(el)
+                electron_affinity = ed.data.get('Electron affinity_eV')
+                if electron_affinity is not None:
+                    result += electron_affinity * weight_fraction
+                    total_weight += weight_fraction
+            except Exception as e:
+                print(f"Warning: Could not get electron affinity for {el}: {e}")
+                continue
+        return result if total_weight > 0 else 0
+
 
     def polarizability(self):
         def calc(formula):
@@ -95,8 +233,12 @@ class NanoDescriptors:
             homo = mo['HOMO'][-1]
             lumo = mo['LUMO'][-1]
             hardness = (lumo - homo) / 2
-            softness = 1 / (2 * hardness)
-            electrophilicity = (hardness * ((-homo) ** 2)) / (2 * hardness)
+            if hardness != 0:
+                softness = 1 / (2 * hardness)
+                electrophilicity = (hardness * ((-homo) ** 2)) / (2 * hardness)
+            else:
+                softness = None
+                electrophilicity = None
             chemical_potential = -0.5 * (homo + lumo)
             return {
                 'HOMO': homo,
@@ -135,41 +277,38 @@ class NanoDescriptors:
             return result
         return {}
 
+
     def atomic_mechanical_descriptors(self):
-        descriptor_names = [
-            'atomic_number', 'atomic_mass', 'electron_affinity', 'first_ionization_energy',
-            'atomic_radius_calculated', 'van_der_waals_radius', 'electrical_resistivity',
-            'velocity_of_sound', 'reflectivity', 'refractive_index', 'poissons_ratio',
-            'molar_volume', 'thermal_conductivity', 'boiling_point', 'melting_point',
-            'critical_temperature', 'superconduction_temperature', 'liquid_range',
-            'bulk_modulus', 'youngs_modulus', 'brinell_hardness', 'rigidity_modulus',
-            'mineral_hardness', 'vickers_hardness', 'density_of_solid',
-            'coefficient_of_linear_thermal_expansion'
-        ]
+        """
+        Рассчитывает атомные и механические дескрипторы
+        как средневзвешенные по массе элементарных свойств.
+        """
+        desc = {}
 
-        descriptor_sums = {name: 0.0 for name in descriptor_names}
-        total_weight = 0.0
+        total_weight = 0
+        for el_symbol, amt in get_el_amt_dict(self.formula).items():
+            try:
+                #element = pmg.Element(el_symbol)
+                ed = ElementDescriptor(el_symbol)
+                props = ed.get_numeric()
+                weight_frac = get_wt_fraction(self.formula, el_symbol)
+                total_weight += weight_frac
 
-        for formula in self.parts:
-            comp = self._get_composition(formula)
-            for el_symbol, amt in comp.items():
-                try:
-                    el = pmg.Element(el_symbol)
-                    weight_frac = comp.get_wt_fraction(el)
-                    total_weight += weight_frac
-                    for name in descriptor_names:
-                        val = getattr(el, name, None)
-                        if isinstance(val, numbers.Number):
-                            descriptor_sums[name] += val * weight_frac
-                except Exception as e:
-                    print(f"[WARN] Failed descriptor for element {el_symbol}: {e}")
-                    continue
+                for k, v in props.items():
+                    if isinstance(v, (int, float)):
+                        desc[k] = desc.get(k, 0.0) + v * weight_frac
 
-        averaged = {
-            f"avg_{name}": (val / total_weight if total_weight else None)
-            for name, val in descriptor_sums.items()
-        }
-        return averaged
+            except Exception as e:
+                print(f"[WARN] Skipping {el_symbol}: {e}")
+                continue
+
+        # Нормализуем, чтобы получились средневзвешенные значения
+        if total_weight > 0:
+            for k in desc:
+                desc[k] /= total_weight
+
+        # Добавим префикс и округлим
+        return {f"avg_atomic_{k}": round(v, 6) for k, v in desc.items()}
 
     def get_thermo_descriptors(self):
         formulas = self.parts
@@ -177,10 +316,12 @@ class NanoDescriptors:
         try:
             weights = [Composition(f).weight for f in formulas]
             total_weight = sum(weights)
-            weight_fractions = [w / total_weight for w in weights]
+            if total_weight != 0:
+                weight_fractions = [w / total_weight for w in weights]
         except Exception:
             weights = [1.0 for _ in formulas]
-            weight_fractions = [1.0 / len(formulas)] * len(formulas)
+            if len(formulas) !=0:
+                weight_fractions = [1.0 / len(formulas)] * len(formulas)
 
         skip_keys = {
             'ChemicalMetadata', 'synonyms', 'InChI', 'CAS', 'autocalc', 'PubChem', 'formula', 'MW', 'atoms',
@@ -416,7 +557,7 @@ class NanoDescriptors:
                 print(f"Warning in sum_metal_elneg_div_ox for part '{part}': {e}")
                 continue
 
-        if total_oxygen <= 0:
+        if total_oxygen == 0:
             return {}
 
         smednox = metal_elneg_sum / total_oxygen
@@ -429,7 +570,8 @@ class NanoDescriptors:
             'molecular_weight': self.molecular_weight(),
             'average_electronegativity': self.average_electronegativity(),
             'average_electron_affinity': self.average_electron_affinity(),
-            'polarizability': self.polarizability()
+            'polarizability': self.polarizability(),
+            'material_type': self.material_type()
         }
         desc.update(self.homo_lumo())
         desc.update(self.get_thermo_descriptors())
@@ -441,6 +583,6 @@ class NanoDescriptors:
         desc.update(self.sum_metal_ionization_energy())
         desc.update(self.sum_metal_elneg())
         desc.update(self.sum_metal_elneg_div_ox())
-        aflow_desc, _ = self.aflow_descriptors()
-        desc.update(aflow_desc)
+        #aflow_desc, _ = self.aflow_descriptors()
+        #desc.update(aflow_desc)
         return desc

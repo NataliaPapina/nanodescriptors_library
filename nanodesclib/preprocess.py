@@ -4,6 +4,7 @@ from typing import List, Optional, Literal
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, OrdinalEncoder
 from sklearn.impute import KNNImputer
 from category_encoders import TargetEncoder
+from sklearn.feature_selection import VarianceThreshold
 
 
 class DataPreprocessor:
@@ -15,7 +16,7 @@ class DataPreprocessor:
         encoding: Literal['onehot', 'ordinal', 'target', 'none'] = 'onehot',
         scaling: Literal['standard', 'minmax', 'robust', 'none'] = 'standard',
         nan_strategy: Literal['mean', 'median', 'mode', 'drop'] = 'mean',
-        use_knn_imputer: bool = False
+        use_knn_imputer: bool = False,
     ):
         self.target_column = target_column
         self.columns_to_drop = columns_to_drop or []
@@ -24,10 +25,11 @@ class DataPreprocessor:
         self.scaling = scaling
         self.nan_strategy = nan_strategy
         self.use_knn_imputer = use_knn_imputer
-
         self.encoder = None
         self.scaler = None
         self.removed_columns = []
+        self.high_corr_columns_to_drop = []
+        self.selector = None
 
     def _convert_special_strings_to_nan(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -88,6 +90,7 @@ class DataPreprocessor:
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
+        df = df.drop_duplicates()
 
         df.drop(columns=self.columns_to_drop, errors="ignore", inplace=True)
         self.removed_columns.extend(self.columns_to_drop)
@@ -133,6 +136,7 @@ class DataPreprocessor:
             df[num_cols] = self.scaler.fit_transform(df[num_cols])
 
         df = self._final_fill_missing(df)
+
         return df
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -143,14 +147,19 @@ class DataPreprocessor:
         df = self._fill_missing(df)
 
         cat_cols = df.select_dtypes(include=["object", "category"]).columns.drop(self.target_column, errors="ignore")
-        if self.encoding == "ordinal" and self.encoder is not None:
-            df[cat_cols] = self.encoder.transform(df[cat_cols])
-        elif self.encoding == "onehot":
-            df = pd.get_dummies(df, drop_first=True)
+        if len(cat_cols) > 0:
+            if self.encoding == "ordinal" and self.encoder is not None:
+                df[cat_cols] = self.encoder.transform(df[cat_cols])
+            elif self.encoding == "target" and self.encoder is not None:
+                df[cat_cols] = self.encoder.transform(df[cat_cols])
+            elif self.encoding == "onehot":
+                df = pd.get_dummies(df, drop_first=True)
 
         num_cols = df.select_dtypes(include=["number"]).columns.drop(self.target_column, errors="ignore")
-        if self.scaler is not None:
+
+        if len(num_cols) > 0 and self.scaler is not None:
             df[num_cols] = self.scaler.transform(df[num_cols])
 
         df = self._final_fill_missing(df)
+
         return df

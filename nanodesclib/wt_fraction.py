@@ -1,6 +1,3 @@
-""" Data _periodic_table.yaml was taken from https://github.com/materialsproject/pymatgen/
-                    https://pymatgen.org """
-
 from pathlib import Path
 from collections import defaultdict
 import re
@@ -12,54 +9,73 @@ def load_periodic_table():
     global _periodic_table_cache
     if _periodic_table_cache is not None:
         return _periodic_table_cache
-    script_dir = Path(__file__).resolve().parent
-    file_path = script_dir / "reference" / "_periodic_table.yaml"
+    file_path = Path(__file__).parent / "reference" / "_periodic_table.yaml"
     with open(file_path, 'r', encoding='utf-8') as f:
         _periodic_table_cache = yaml.safe_load(f)
     return _periodic_table_cache
 
-
 def element_weight(element):
+    """Возвращает атомную массу элемента"""
     data = load_periodic_table()
     mass = data.get('Atomic mass', {}).get('data', {}).get(element)
     if mass is None:
-        raise ValueError(f"Atomic mass of {element} wasn't found")
+        raise ValueError(f"Атомная масса для {element} не найдена")
     return float(mass)
 
-
-def parse_simple_formula(formula):
-    pattern = r'([A-Z][a-z]?)(\d*\.?\d*)'
+def parse_formula(formula):
+    """
+    Разбирает простую формулу H2O, Fe2O3, C6H12O6
+    """
+    pattern = r'([A-Z][a-z]?)(\d*\.?\,?\d*)'
     counts = defaultdict(float)
     for el, num in re.findall(pattern, formula):
         counts[el] += float(num) if num else 1.0
     return dict(counts)
 
+def split_components(formula_str):
+    """
+    Разбивает смесь на компоненты с коэффициентами
+    """
+    s = re.sub(r'[-/@]', '|', formula_str)
+    pattern = r'\(([^()]+)\)([0-9.]+)|([A-Z][a-z]?[A-Za-z0-9]*)'
+    parts = []
+    for match in re.finditer(pattern, s):
+        if match.group(1):
+            formula = match.group(1)
+            factor = float(match.group(2))
+        else:
+            formula = match.group(3)
+            factor = 1.0
+        parts.append((formula, factor))
+    return parts
 
 def formula_mass(formula):
-    counts = parse_simple_formula(formula)
+    counts = parse_formula(formula)
     return sum(element_weight(el) * n for el, n in counts.items())
 
+def get_wt_fraction(formula_str, element):
+    """
+    Упрощенная версия для массовой доли элемента
+    """
+    comps = split_components(formula_str)
 
-def get_wt_fraction(formula, element):
-    separators = r'[@/–]'
-    parts = re.split(separators, formula)
+    total_mass = 0
+    elem_mass = 0
 
-    def parse_part(p):
-        m = re.fullmatch(r'\(?([A-Za-z0-9]+)\)?([\d\.]*)', p.strip())
-        if m:
-            f, factor = m.groups()
-            factor = float(factor) if factor else 1.0
-            return f, factor
-        return p.strip(), 1.0
+    for f, fct in comps:
+        counts = parse_formula(f)
+        comp_mass = formula_mass(f) * fct
+        total_mass += comp_mass
 
-    total_mass = 0.0
-    element_mass = 0.0
-    for part in parts:
-        formula_part, factor = parse_part(part)
-        m_part = formula_mass(formula_part) * factor
-        total_mass += m_part
-        counts = parse_simple_formula(formula_part)
         if element in counts:
-            element_mass += element_weight(element) * counts[element] * factor
+            elem_mass += element_weight(element) * counts[element] * fct
 
-    return element_mass / total_mass if total_mass else 0.0
+    return elem_mass / total_mass if total_mass > 0 else 0.0
+
+def get_component_fractions(formula_str):
+    """
+    Для долей компонентов (используется в классификации)
+    """
+    comps = split_components(formula_str)
+    total_mass = sum(formula_mass(f) * fct for f, fct in comps)
+    return {f"{f}": formula_mass(f) * fct / total_mass for f, fct in comps}
