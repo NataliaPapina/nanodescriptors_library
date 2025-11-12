@@ -15,7 +15,8 @@ class DescriptorDatasetBuilder:
         dataframe: Optional[pd.DataFrame] = None,
         formula_col: str = "formula",
         smiles_cols: Optional[List[str]] = None,
-        structure_col: str = "structure"
+        structure_col: str = "structure",
+        use_rdkit_descriptors: bool = False,
     ):
         self.original_df = dataframe.copy() if dataframe is not None else None
 
@@ -34,6 +35,11 @@ class DescriptorDatasetBuilder:
                 [s for s in row if pd.notnull(s)] if isinstance(row, (list, tuple)) else [row]
                 for row in self.smiles
             ]
+
+            if smiles:
+                self.use_rdkit_descriptors = True
+            else:
+                self.use_rdkit_descriptors = use_rdkit_descriptors
 
             self.structures = dataframe[structure_col].tolist() if structure_col in dataframe else [None] * len(self.formulas)
 
@@ -69,7 +75,8 @@ class DescriptorDatasetBuilder:
                 desc = cache[key]
             else:
                 try:
-                    desc_obj = NanoDescriptors(formula=f, smiles=smiles_list, structure=struct)
+                    desc_obj = NanoDescriptors(formula=f, smiles=smiles_list, structure=struct,
+                                               use_rdkit_descriptors=self.use_rdkit_descriptors)
                     desc = desc_obj.all_descriptors()
                     cache[key] = desc
                 except Exception as e:
