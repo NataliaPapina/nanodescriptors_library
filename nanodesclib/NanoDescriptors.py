@@ -13,9 +13,6 @@ from pathlib import Path
 from thermo.chemical import Chemical
 from itertools import chain
 import warnings
-from rdkit import Chem
-from rdkit.Chem import Descriptors
-from rdkit.Chem import rdMolDescriptors
 from pymatgen.analysis.local_env import CrystalNN
 from nanodesclib.aflow import AflowDescriptors
 import numbers
@@ -27,39 +24,89 @@ current_path = Path(__file__).parent.resolve()
 csv_file_path = current_path / "reference/polarizabilities.csv"
 polarizabilities = pd.read_csv(csv_file_path)
 
+USE_RDKIT_DESCRIPTORS = False
+
+try:
+    if USE_RDKIT_DESCRIPTORS:
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors
+        from rdkit.Chem import rdMolDescriptors
+        RDKIT_AVAILABLE = True
+    else:
+        RDKIT_AVAILABLE = False
+except ImportError:
+    RDKIT_AVAILABLE = False
 
 class NanoDescriptors:
     cas_cache = {}
     thermo_cache = {}
 
-    def __init__(self, formula, smiles=None, structure=None):
-        inorganic_formula, organic_smiles = self.extract_organic_components(formula)
+    def __init__(self, formula, smiles=None, structure=None, use_rdkit_descriptors=None):
+        self.original_formula = formula
 
-        if inorganic_formula:
-            self.formula = inorganic_formula
-        else:
-            self.formula = formula
-        all_smiles = []
-        if smiles:
-            if isinstance(smiles, list):
-                all_smiles.extend(smiles)
-            else:
-                all_smiles.append(smiles)
-        all_smiles.extend(organic_smiles)
+        if not isinstance(formula, str):
+            raise ValueError(f"Formula must be a string, got {type(formula)}")
 
-        self.smiles = all_smiles if all_smiles else None
+        formula = self.clean_formula(formula)
+
+        # Extract components
+        #inorganic_formula, organic_smiles = self.extract_organic_components(formula)
+
+        # Определяем основную формулу для расчетов
+        #if inorganic_formula:
+         #   self.formula = inorganic_formula
+        # else:
+        #     self.formula = formula
+        #
+        # # Combine all SMILES
+        # all_smiles = []
+        #
+        # if smiles:
+        #     if isinstance(smiles, list):
+        #         all_smiles.extend([s for s in smiles if s])
+        #     elif isinstance(smiles, str):
+        #         all_smiles.append(smiles)
+        #
+        # if organic_smiles:
+        #     all_smiles.extend([s for s in organic_smiles if s])
+        #
+        # self.smiles = all_smiles if all_smiles else None
+        self.formula = formula
+        self.smiles = smiles
         self.structure = structure
 
-        self.compound_class = assign_class(self.formula)
+        if use_rdkit_descriptors is None:
+            self.use_rdkit_descriptors = USE_RDKIT_DESCRIPTORS
+        else:
+            self.use_rdkit_descriptors = use_rdkit_descriptors
+
         try:
-            if self.compound_class._type not in ['composite', 'coreshell']:
-                self.parts = [self.formula]
-            else:
-                self.parts = self.compound_class.consist()
-        except:
+            self.compound_class = assign_class(self.formula)
+
+            self.parts = self.compound_class.consist()
+
+        except Exception as e:
+            print(f"Error in class assignment for {formula}: {e}")
+            self.compound_class = Metal(self.formula)
             self.parts = [self.formula]
 
-        self.structure = structure
+        if not self.parts:
+            self.parts = [self.formula]
+
+    def clean_formula(self, formula):
+        """Очищает формулу от невидимых символов и мусора"""
+        if not formula:
+            return formula
+
+        formula = ''.join(char for char in formula if ord(char) >= 32 and ord(char) <= 126)
+
+        formula = formula.replace('\xa0', '').replace('–', '-').replace('−', '-').strip()
+
+        formula = formula.replace('A0+', '').replace('A0', '')
+
+        formula = formula.strip()
+
+        return formula
 
     def is_inorganic_formula(self, formula):
         """
@@ -70,7 +117,6 @@ class NanoDescriptors:
         # - не содержит типичных органических паттернов
         clean_formula = re.sub(r'[-/@]', '', formula)
 
-        # Паттерн для неорганических формул: элементы + цифры + точки
         inorganic_pattern = r'^([A-Z][a-z]?(\d*\.?\,?\d*)*)+$'
 
         if not re.match(inorganic_pattern, clean_formula):
@@ -88,32 +134,50 @@ class NanoDescriptors:
     def extract_organic_components(self, formula):
         """
         Разделяет формулу на неорганическую часть и органические компоненты
-        Возвращает (inorganic_part, organic_smiles_list)
         """
+        if not formula:
+            return None, []
+
+        # If it looks like a simple inorganic formula, return as is
         if self.is_inorganic_formula(formula):
             return formula, []
 
-        parts = re.split(r'[@]', formula)
+        # For complex formulas with @, try to split
+        if '@' in formula:
+            parts = formula.split('@')
+            inorganic_parts = []
+            organic_parts = []
 
-        inorganic_parts = []
-        organic_smiles_list = []
-
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-
-            if self.is_inorganic_formula(part):
-                inorganic_parts.append(part)
-            else:
-                smiles = self.get_smiles_from_name(part)
-                if smiles:
-                    organic_smiles_list.append(smiles)
+            for part in parts:
+                part = part.strip()
+                if self.is_inorganic_formula(part):
+                    inorganic_parts.append(part)
                 else:
-                    print(f"Warning: Could not find SMILES for: {part}")
+                    organic_parts.append(part)
 
-        inorganic_part = '@'.join(inorganic_parts) if inorganic_parts else None
-        return inorganic_part, organic_smiles_list
+            inorganic_part = '@'.join(inorganic_parts) if inorganic_parts else None
+
+            # Try to get SMILES for organic parts
+            organic_smiles = []
+            for org_part in organic_parts:
+                smiles = self.get_smiles_from_name(org_part)
+                if smiles:
+                    organic_smiles.append(smiles)
+                else:
+                    print(f"Warning: Could not find SMILES for: {org_part}")
+                    # If we can't find SMILES, treat it as inorganic
+                    inorganic_parts.append(org_part)
+
+            inorganic_part = '@'.join(inorganic_parts) if inorganic_parts else None
+            return inorganic_part, organic_smiles
+
+        # If no @ and doesn't look inorganic, try to get SMILES
+        smiles = self.get_smiles_from_name(formula)
+        if smiles:
+            return None, [smiles]
+
+        # If all else fails, treat as inorganic
+        return formula, []
 
     def get_smiles_from_name(self, name):
         """
@@ -158,17 +222,6 @@ class NanoDescriptors:
     def molecular_weight(self):
         return formula_mass(self.formula)
 
-    def _get_composition(self, formula):
-        """Безопасное получение состава с обработкой составных формул"""
-        try:
-            # Пробуем стандартный pymatgen для простых формул
-            return pmg.Composition(formula)
-        except:
-            # Для составных формул используем наш парсер
-            elements = get_el_amt_dict(formula)
-            # Создаем Composition из словаря элементов
-            return pmg.Composition(elements)
-
     def average_electronegativity(self):
         def calc_electroneg(formula):
             elements = get_el_amt_dict(formula)
@@ -185,7 +238,7 @@ class NanoDescriptors:
                     if electroneg is not None:
                         electroneg_sum += electroneg * amt
                         valid_elements += amt
-                except:
+                except Exception as e:
                     print(f"Warning: Could not get electronegativity for {el}: {e}")
                     continue
             return electroneg_sum / valid_elements if valid_elements > 0 else 0
@@ -212,15 +265,14 @@ class NanoDescriptors:
 
     def polarizability(self):
         def calc(formula):
-            comp = self._get_composition(formula)
-            elements = comp.as_dict()
+            elements = get_el_amt_dict(formula)
             result = 0
             for el in elements:
                 pol_row = polarizabilities[polarizabilities['Atom'] == el]
                 if not pol_row.empty:
                     try:
                         val = float(pol_row['αD'].values[0].split(' ± ')[0])
-                        wt = comp.get_wt_fraction(pmg.Element(el))
+                        wt = get_wt_fraction(formula, el)
                         result += val * wt
                     except:
                         pass
@@ -302,19 +354,17 @@ class NanoDescriptors:
                 print(f"[WARN] Skipping {el_symbol}: {e}")
                 continue
 
-        # Нормализуем, чтобы получились средневзвешенные значения
         if total_weight > 0:
             for k in desc:
                 desc[k] /= total_weight
 
-        # Добавим префикс и округлим
         return {f"avg_atomic_{k}": round(v, 6) for k, v in desc.items()}
 
     def get_thermo_descriptors(self):
         formulas = self.parts
 
         try:
-            weights = [Composition(f).weight for f in formulas]
+            weights = [formula_mass(f) for f in formulas]
             total_weight = sum(weights)
             if total_weight != 0:
                 weight_fractions = [w / total_weight for w in weights]
@@ -339,7 +389,29 @@ class NanoDescriptors:
             'EnthalpySublimation', 'PermittivityLiquid', 'Permittivity', 'SurfaceTension',
             'ThermalConductivitySolid', 'ThermalConductivityGas', 'ViscosityGas', 'ThermalConductivityLiquid',
             'SublimationPressure', 'ViscosityLiquid', '_eos_T_101325', 'eos_Tb', 'molecular_diameter_sources',
-            'molecular_diameter_source', 'LFL_sources', 'LFL_source', 'UFL_sources', 'UFL_source'
+            'molecular_diameter_source', 'LFL_sources', 'LFL_source', 'UFL_sources', 'UFL_source',
+
+            'rings', 'aromatic_rings', 'is_aromatic', 'is_organic', 'is_inorganic', 'is_alkane',
+            'is_cycloalkane', 'is_alkene', 'is_alkyne', 'is_aromatic', 'is_alcohol', 'is_amine',
+            'is_primary_amine', 'is_secondary_amine', 'is_tertiary_amine', 'is_aldehyde', 'is_ketone',
+            'is_carboxylic_acid', 'is_ester', 'is_ether', 'is_nitrile', 'is_nitro', 'is_amide',
+            'is_haloalkane', 'is_fluoroalkane', 'is_chloroalkane', 'is_bromoalkane', 'is_iodoalkane',
+            'is_imide', 'is_imide', 'is_anhydride', 'is_sulfide', 'is_disulfide', 'is_mercaptan',
+            'is_peroxide', 'is_hydroperoxide', 'is_oxime', 'is_isonitrile', 'is_cyanate', 'is_isocyanate',
+            'is_thiocyanate', 'is_isothiocyanate', 'is_azide', 'is_azo', 'is_nitroso', 'is_nitrate',
+            'is_nitrite', 'is_phosphate', 'is_phosphonic_acid', 'is_phosphodiester', 'is_phosphine',
+            'is_sulfonic_acid', 'is_sulfoxide', 'is_sulfone', 'is_sulfonate_ester', 'is_sulfinic_acid',
+            'is_thiolester', 'is_thionoester', 'is_thial', 'is_thioketone', 'is_carbothioic_s_acid',
+            'is_carbothioic_o_acid', 'is_carbodithioic_acid', 'is_carbamate', 'is_urea', 'is_carbonate',
+            'is_orthoester', 'is_orthocarbonate_ester', 'is_siloxane', 'is_boronic_acid', 'is_boronic_ester',
+            'is_borinic_acid', 'is_borinic_ester', 'is_acyl_halide', 'is_carboxylic_anhydride',
+            'is_alkylaluminium', 'is_alkyllithium', 'is_alkylmagnesium_halide', 'is_silyl_ether',
+            'is_phenol', 'is_pyridyl', 'is_polyol', 'is_quat', 'is_branched_alkane', 'is_acid',
+            'is_amidine', 'is_imine', 'is_primary_aldimine', 'is_secondary_aldimine', 'is_primary_ketimine',
+            'is_secondary_ketimine', 'is_carboxylate', 'is_cyanide', 'is_methylenedioxy',
+
+            # Структурные дескрипторы RDKit
+            'Van_der_Waals_volume', 'Van_der_Waals_area', 'similarity_variable'
         }
 
         all_keys = set()
@@ -386,10 +458,76 @@ class NanoDescriptors:
 
         return result
 
+    def get_rdkit_thermo_descriptors(self):
+        """Получает только RDKit-зависимые термодинамические дескрипторы"""
+        if not self.use_rdkit_descriptors or not RDKIT_AVAILABLE:
+            return {}
+
+        formulas = self.parts
+
+        try:
+            weights = [formula_mass(f) for f in formulas]
+            total_weight = sum(weights)
+            if total_weight != 0:
+                weight_fractions = [w / total_weight for w in weights]
+        except Exception:
+            weights = [1.0 for _ in formulas]
+            if len(formulas) != 0:
+                weight_fractions = [1.0 / len(formulas)] * len(formulas)
+
+        # Только RDKit-зависимые свойства
+        rdkit_keys = {
+            'rings', 'aromatic_rings', 'is_aromatic', 'is_organic', 'is_inorganic', 'is_alkane',
+            'is_cycloalkane', 'is_alkene', 'is_alkyne', 'is_alcohol', 'is_amine',
+            'is_primary_amine', 'is_secondary_amine', 'is_tertiary_amine', 'is_aldehyde', 'is_ketone',
+            'is_carboxylic_acid', 'is_ester', 'is_ether', 'is_nitrile', 'is_nitro', 'is_amide',
+            'is_haloalkane', 'is_fluoroalkane', 'is_chloroalkane', 'is_bromoalkane', 'is_iodoalkane',
+            'Van_der_Waals_volume', 'Van_der_Waals_area', 'similarity_variable'
+        }
+
+        all_keys = set()
+        part_descriptors = []
+
+        for formula, weight_fraction in zip(formulas, weight_fractions):
+            try:
+                chem = Chemical(formula)
+            except Exception:
+                continue
+
+            descriptors = {}
+            for attr in rdkit_keys:
+                try:
+                    value = getattr(chem, attr)
+                    if callable(value):
+                        sig = inspect.signature(value)
+                        if len(sig.parameters) > 0:
+                            continue
+                        value = value()
+                    if isinstance(value, (int, float, str, bool, np.number)):
+                        descriptors[attr] = value
+                except Exception:
+                    continue
+
+            descriptors['weight_fraction'] = weight_fraction
+            part_descriptors.append(descriptors)
+            all_keys.update(descriptors.keys())
+
+        result = {}
+        for key in all_keys:
+            values = []
+            weights = []
+            for d in part_descriptors:
+                if key in d and isinstance(d[key], (int, float)):
+                    values.append(d[key])
+                    weights.append(d['weight_fraction'])
+            if values:
+                result['thermo_rdkit_' + key] = np.average(values, weights=weights)
+
+        return result
+
     def electronic_descriptors(self):
         def calc(formula):
-            comp = self._get_composition(formula)
-            elements = comp.as_dict()
+            elements = get_el_amt_dict(formula)
             total_ve = 0
             s, p, d, f = 0, 0, 0, 0
             for el, amt in elements.items():
@@ -446,7 +584,7 @@ class NanoDescriptors:
 
         for formula in formulas:
             try:
-                weight = Composition(formula).weight
+                weight = formula_mass(formula)
                 aflow = AflowDescriptors(formula)
                 aflow.fetch()
                 desc = aflow.get_descriptors()
@@ -489,10 +627,11 @@ class NanoDescriptors:
 
         for part in self.parts:
             try:
-                comp = Composition(part)
-                for el in comp.elements:
-                    if el.is_metal or el.is_metalloid:
-                        e_msm += el.n_electrons * comp[el]
+                for el, amt in get_el_amt_dict(part).items():
+                    if el in All_metals:
+                        atomic_no = ElementDescriptor(el).data.get('Atomic no')
+                        if atomic_no is not None:
+                            e_msm += atomic_no * amt
             except Exception as e:
                 print(f"Warning in E_MSM for part '{part}': {e}")
                 continue
@@ -505,10 +644,14 @@ class NanoDescriptors:
 
         for part in self.parts:
             try:
-                comp = Composition(part)
-                for el in comp.elements:
-                    if el.is_metal and el.ionization_energy:
-                        smi_en += el.ionization_energy * comp[el]
+                comp = get_el_amt_dict(part)
+                for el, amt in comp.items():
+                    if el in All_metals:
+                        ionization_data = ElementDescriptor(el).data.get('Ionization energies')
+                        if ionization_data and len(ionization_data) > 0:
+                            first_ionization = ionization_data[0]
+                            if first_ionization is not None:
+                                smi_en += first_ionization * amt
             except Exception as e:
                 print(f"Warning in sum_metal_ionization_energy for part '{part}': {e}")
                 continue
@@ -521,10 +664,11 @@ class NanoDescriptors:
 
         for part in self.parts:
             try:
-                comp = Composition(part)
-                for el in comp.elements:
-                    if el.is_metal:
-                        metal_elneg_sum += el.X * comp[el]
+                for el, amt in get_el_amt_dict(part).items():
+                    if el in All_metals:
+                        elneg = ElementDescriptor(el).data.get('Pauling electronegativity')
+                        if elneg is not None:
+                            metal_elneg_sum += elneg * amt
             except Exception as e:
                 print(f"Warning in sum_metal_elneg for part '{part}': {e}")
                 continue
@@ -534,11 +678,143 @@ class NanoDescriptors:
         else:
             return {}
 
+    def sum_metal_boiling_point(self):
+        """sum of metal boiling point"""
+        metal_boiling_sum = 0
+
+        for part in self.parts:
+            try:
+                for el, amt in get_el_amt_dict(part).items():
+                    if el in All_metals:
+                        boil = ElementDescriptor(el).data.get('Boiling point')
+                        if boil is not None:
+                            metal_boiling_sum += boil * amt
+            except Exception as e:
+                print(f"Warning in sum_metal_boiling_point for part '{part}': {e}")
+                continue
+
+        if metal_boiling_sum > 0:
+            return {'sum_metal_boiling_point': metal_boiling_sum}
+        else:
+            return {}
+    def sum_metal_molecular_weight(self):
+        """sum of metal molecular weight"""
+        metal_molecular_weight_sum = 0
+
+        for part in self.parts:
+            try:
+                for el, amt in get_el_amt_dict(part).items():
+                    if el in All_metals:
+                        weight = formula_mass(el)
+                        if weight is not None:
+                            metal_molecular_weight_sum += weight * amt
+            except Exception as e:
+                print(f"Warning in sum_metal_molecular_weight for part '{part}': {e}")
+                continue
+
+        if metal_molecular_weight_sum > 0:
+            return {'sum_metal_molecular_weight': metal_molecular_weight_sum}
+        else:
+            return {}
+
+    def part_of_metal_molecular_weight(self):
+        """part of metal molecular weight"""
+        metal_molecular_weight_sum = 0
+        all_metals_list = All_metals.split('|')
+        for part in self.parts:
+            try:
+                el_amt_dict = get_el_amt_dict(part)
+                for el, amt in el_amt_dict.items():
+                    if el in all_metals_list:
+                        weight = formula_mass(el)
+                        if weight is not None:
+                            metal_molecular_weight_sum += weight * amt
+            except Exception as e:
+                print(f"Warning in part_of_metal_molecular_weight for part '{part}': {e}")
+                continue
+
+        total_mass = formula_mass(self.formula)
+
+        if metal_molecular_weight_sum > 0 and total_mass > 0:
+            result = metal_molecular_weight_sum / total_mass
+            return {'part_of_metal_molecular_weight': result}
+        else:
+            return {}
+
+    def average_of_metal_molecular_weight(self):
+        """average of metal molecular weight"""
+        metal_molecular_weight_sum = 0
+        metals = 0
+        for part in self.parts:
+            try:
+                for el, amt in get_el_amt_dict(part).items():
+                    if el in All_metals:
+                        weight = formula_mass(el)
+                        if weight is not None:
+                            metal_molecular_weight_sum += weight * amt
+                            metals += amt
+            except Exception as e:
+                print(f"Warning in average_of_metal_molecular_weight for part '{part}': {e}")
+                continue
+
+        if metal_molecular_weight_sum > 0:
+            return {'average_of_metal_molecular_weight': metal_molecular_weight_sum/metals}
+        else:
+            return {}
+
+    def average_metal_atomic_radius(self):
+        """average of metal atomic radius"""
+        metal_atomic_radius_sum = 0
+        metals = 0
+
+        for part in self.parts:
+            try:
+                for el, amt in get_el_amt_dict(part).items():
+                    if el in All_metals:
+                        rad = ElementDescriptor(el).data.get('Atomic radius')
+                        if rad is not None:
+                            metal_atomic_radius_sum += rad * amt
+                            metals += amt
+            except Exception as e:
+                print(f"Warning in average_metal_atomic_radius for part '{part}': {e}")
+                continue
+
+        if metal_atomic_radius_sum > 0:
+            return {'average_metal_atomic_radius': metal_atomic_radius_sum/metals}
+        else:
+            return {}
+
+    def average_metal_polarizability(self):
+        """average of metal polarizability"""
+        metal_polarizability_sum = 0
+        metals = 0
+
+        for part in self.parts:
+            try:
+                for el, amt in get_el_amt_dict(part).items():
+                    if el in All_metals:
+                        result = 0
+                        pol_row = polarizabilities[polarizabilities['Atom'] == el]
+                        if not pol_row.empty:
+                            try:
+                                metal_polarizability_sum += float(pol_row['αD'].values[0].split(' ± ')[0])
+                                metals += amt
+                            except:
+                                pass
+            except Exception as e:
+                print(f"Warning in average_metal_atomic_radius for part '{part}': {e}")
+                continue
+
+        if metal_polarizability_sum > 0:
+            return {'average_metal_polarizability': metal_polarizability_sum/metals, 'num_metals': metals}
+        else:
+            return {}
+
     def sum_metal_elneg_div_ox(self):
         """sum of metal electronegativity divided by oxygen atoms"""
         formula_type = self.compound_class._type
 
-        if formula_type not in ['metal_oxide', 'complex_metal_oxide', 'composite', 'coreshell']:
+        if formula_type not in ['metal_oxide', 'complex_metal_oxide', 'composite', 'coreshell', 'metallate']:
             return {}
 
         total_oxygen = 0
@@ -546,13 +822,17 @@ class NanoDescriptors:
 
         for part in self.parts:
             try:
-                comp = Composition(part)
-                n_ox = comp.get('O', 0)
-                total_oxygen += n_ox
+                comp = get_el_amt_dict(part)
+                # Проверяем наличие кислорода
+                if 'O' in comp:
+                    n_ox = comp['O']
+                    total_oxygen += n_ox
 
-                for el in comp.elements:
-                    if el.is_metal:
-                        metal_elneg_sum += el.X * comp[el]
+                for el, amt in comp.items():
+                    if el in All_metals:
+                        elneg = ElementDescriptor(el).data.get('Pauling electronegativity')
+                        if elneg is not None:
+                            metal_elneg_sum += elneg * amt
             except Exception as e:
                 print(f"Warning in sum_metal_elneg_div_ox for part '{part}': {e}")
                 continue
@@ -575,7 +855,7 @@ class NanoDescriptors:
         }
         desc.update(self.homo_lumo())
         desc.update(self.get_thermo_descriptors())
-        desc.update(self.smiles_descriptors())
+        #desc.update(self.smiles_descriptors())
         desc.update(self.electronic_descriptors())
         desc.update(self.structural_descriptors())
         desc.update(self.atomic_mechanical_descriptors())
@@ -583,6 +863,15 @@ class NanoDescriptors:
         desc.update(self.sum_metal_ionization_energy())
         desc.update(self.sum_metal_elneg())
         desc.update(self.sum_metal_elneg_div_ox())
+        desc.update(self.sum_metal_boiling_point())
+        desc.update(self.average_metal_atomic_radius())
+        desc.update(self.average_metal_polarizability())
+        desc.update(self.sum_metal_molecular_weight())
+        desc.update(self.part_of_metal_molecular_weight())
+        desc.update(self.average_of_metal_molecular_weight())
+        if self.use_rdkit_descriptors:
+            rdkit_desc = self.get_rdkit_thermo_descriptors()
+            desc.update(rdkit_desc)
         #aflow_desc, _ = self.aflow_descriptors()
         #desc.update(aflow_desc)
         return desc
