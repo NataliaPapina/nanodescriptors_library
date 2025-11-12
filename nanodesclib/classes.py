@@ -29,20 +29,35 @@ def assign_class(text):
     rules = [
         (comp, Composite),
         (metal, Metal),
+        (metallate, Metallate),
         (metal_ox, MetalOxide),
-        (salt, Salt),
         (mix_ox, ComplexOxide),
-        (bime, BiMetal),
-        (mix_salt, ComplexSalt),
-        (trme, TriMetal),
+        #(bime, BiMetal),
+        #(trme, TriMetal),
         (me_hydrox, MetalHydroxide),
         (nonmetal, NonMetal),
+        (carbide_halogenide, Carbide),
+        (intermetallic_carbide, Intermetallic),
         (carbide, Carbide),
-        (qme, TetraMetal),
-        (nitride, Nitride),
-        (phosphide, Phosphide),
+        #(qme, TetraMetal),
+        #(nitride, Nitride),
+        #(phosphide, Phosphide),
         (nonmetal_compound, NonmetalCompound),
-        (pentame, PentaMetal)
+        #(pentame, PentaMetal),
+        (intermetallic, Intermetallic),
+        (me_pnictide, MetalPnictide),
+        (borocarbide, BoroCarbide),
+        (boronitride, BoroNitride),
+        (kesterite, Kesterite),
+        (complex_chalcogenide, ComplexChalcogenide),
+        (carbonate, Salt),
+        (salt, Salt),
+        (thiophosphate, ComplexSalt),
+        (selenophosphate, ComplexSalt),
+        (selenide_halide, ComplexSalt),
+        (chalcogen_halide, ComplexSalt),
+        (complex_halogenide, ComplexSalt),
+        (mix_salt, ComplexSalt),
     ]
 
     for pattern, cls in rules:
@@ -60,8 +75,45 @@ class Metal:
         self.core = self.formula
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
+class BoroNitride:
+    _type = 'boronitride'
+
+    def __init__(self, formula):
+        self.formula = formula
+
+    def consist(self):
+        return [self.formula]
+
+
+class Kesterite:
+    _type = 'kesterite'
+
+    def __init__(self, formula):
+        self.formula = formula
+
+    def consist(self):
+        return [self.formula]
+
+
+class ComplexChalcogenide:
+    _type = 'complex_chalcogenide'
+
+    def __init__(self, formula):
+        self.formula = formula
+
+    def consist(self):
+        return [self.formula]
+
+class BoroCarbide:
+    _type = 'borocarbide'
+
+    def __init__(self, formula):
+        self.formula = formula
+
+    def consist(self):
+        return [self.formula]
 
 class MetalOxide:
     _type = 'metal_oxide'
@@ -71,18 +123,25 @@ class MetalOxide:
         self.core = self.formula
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
+class MetalPnictide:
+    _type = 'metal_pnictide'
+
+    def __init__(self, formula):
+        self.formula = formula
+
+    def consist(self):
+        return [self.formula]
 
 class Salt:
     _type = 'salt'
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
 
 class NonMetal:
@@ -90,10 +149,9 @@ class NonMetal:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
 
 class Carbide:
@@ -101,10 +159,9 @@ class Carbide:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
 
 class Nitride:
@@ -112,10 +169,9 @@ class Nitride:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
 
 class Phosphide:
@@ -123,10 +179,9 @@ class Phosphide:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
 
 class NonmetalCompound:
@@ -134,10 +189,9 @@ class NonmetalCompound:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
 
 class CoreShell:
@@ -177,10 +231,9 @@ class ComplexOxide:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
 
 class ComplexSalt:
@@ -188,10 +241,9 @@ class ComplexSalt:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
 
 class MetalHydroxide:
@@ -199,10 +251,9 @@ class MetalHydroxide:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
-        return self.formula
+        return [self.formula]
 
 
 class BiMetal:
@@ -210,7 +261,6 @@ class BiMetal:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
         return self.formula
@@ -221,7 +271,6 @@ class TriMetal:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
         return self.formula
@@ -232,7 +281,6 @@ class TetraMetal:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
         return self.formula
@@ -243,7 +291,24 @@ class PentaMetal:
 
     def __init__(self, formula):
         self.formula = formula
-        self.core = pmg.Composition(self.formula)
 
     def consist(self):
         return self.formula
+
+class Intermetallic:
+    _type = 'intermetallic'
+
+    def __init__(self, formula):
+        self.formula = formula
+
+    def consist(self):
+        return [self.formula]
+
+class Metallate:
+    _type = 'metallate'
+
+    def __init__(self, formula):
+        self.formula = formula
+
+    def consist(self):
+        return [self.formula]

@@ -9,6 +9,7 @@ All_metals = '|'.join([Alkali_Metals, Alkaline_Earth_Metals, Transition_Metals, 
 Halogens = 'F|Cl|Br|I'
 Chalcogen = 'O|S|Se'
 Pnictogens = 'N|P'
+All_pnictogens = 'N|P|As|Sb|Bi'
 Carbon = 'C'
 Hydrogen = 'H'
 
@@ -28,13 +29,15 @@ metal = r'\(?' + f'({All_metals})' + num + r'\)?' + num
 
 metal_ox = r'\(?' + f'({All_metals})' + num + 'O' + num + r'\)?' + num
 
-salt = r'\(?' + f'({All_metals})' + num + r'\(?' + '(O)?' + '(OH)?' + r'\)?' + num + r'\(?' + anion + r'\)?' + num + r'\(?' + '(O)?' + r'\)?' + num + r'\(?' + '(OH)?' + r'\)?' + num + r'\)?'
+salt = r'\(?(Li|Na|K|Rb|Cs|Fr|Be|Mg|Ca|Sr|Ba|Ra|La|Ce|Pr|Nd|Pm|Sm|Eu|Gd|Tb|Dy|Ho|Er|Tm|Yb|Lu|Ac|Th|Pa|U|Np|Pu|Am|Cm|Bk|Cf|Es|Fm|Md|No|Lr|Sc|Y|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Zr|Nb|Mo|Tc|Ru|Rh|Pd|Ag|Cd|Hf|Ta|W|Re|Os|Ir|Pt|Au|Hg|Rf|Db|Sg|Bh|Hs|Mt|Ds|Rg|Cn|Al|Ga|In|Sn|Tl|Pb|Bi|Nh|Fl|Mc|Lv|Po|B|Si|Ge|As|Sb|Te|At|Ts)([0-9]{0,2}[.,]?[0-9]{0,})?(\(?O?H?H?\)?)?([0-9]{0,2}[.,]?[0-9]{0,})?\(?(((F|Cl|Br|I|O|S|Se|N|P|C|H|B|Si|Ge|As|Sb|Te|At|Ts|Se)([0-9]{0,2}[.,]?[0-9]{0,})?O([0-9]{0,2}[.,]?[0-9]{0,})?\)?(\(?O?H?H?\)?)?([0-9]{0,2}[.,]?[0-9]{0,})?)|(F|Cl|Br|I|S|Se|B|Si|Ge|As|Sb|Te|At|Ts|Se|(\(?PW12O40\)?)|(\(?SiW12O40\)?)|(\(?PW11O39\)?))[0-9]{0,2})(\(?O?H?H?\)?)?([0-9]{0,2}[.,]?[0-9]{0,})?'
 
-mix_ox = r'\(?' + f'({All_metals})' + num + 'O?' + num + r'\)?' + (r'(\(?' + f'({All_metals})' + num + r'\)?)?')*5 + r'\(?' + f'({All_metals})' + num + 'O' + num + r'\)?' + num + r'\)?'
+mix_ox = r'\(?((Li|Na|K|Rb|Cs|Fr|Be|Mg|Ca|Sr|Ba|Ra|La|Ce|Pr|Nd|Pm|Sm|Eu|Gd|Tb|Dy|Ho|Er|Tm|Yb|Lu|Ac|Th|Pa|U|Np|Pu|Am|Cm|Bk|Cf|Es|Fm|Md|No|Lr|Sc|Y|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Zr|Nb|Mo|Tc|Ru|Rh|Pd|Ag|Cd|Hf|Ta|W|Re|Os|Ir|Pt|Au|Hg|Rf|Db|Sg|Bh|Hs|Mt|Ds|Rg|Cn|Al|Ga|In|Sn|Tl|Pb|Bi|Nh|Fl|Mc|Lv|Po|B|Si|Ge|As|Sb|Te|At|Ts).([0-9]{0,2}[.,]?[0-9]{0,})?O?)+\)?O([0-9]{0,2}[.,]?[0-9]{0,})?\)?([0-9]{0,2}[.,]?[0-9]{0,})?\)?'
 
 me_hydrox = r'\(?' + f'({All_metals})' + num + '(O)?' + num + r'\(?' + 'OH' + r'\)?' + num + r'\)?'
 
-mix_salt = r'\(?' + f'({All_metals})' + r'\)?' + num + r'\(?' + (f'({All_metals})?' + num + anion + '?' + num)*2 + anion + num + f'({All_metals})?' + num + (anion + '?' + num)*4 + num + r'\)?' + num + 'O?' + num
+#mix_salt = r'(\(?(Li|Na|K|Rb|Cs|Fr|Be|Mg|Ca|Sr|Ba|Ra|La|Ce|Pr|Nd|Pm|Sm|Eu|Gd|Tb|Dy|Ho|Er|Tm|Yb|Lu|Ac|Th|Pa|U|Np|Pu|Am|Cm|Bk|Cf|Es|Fm|Md|No|Lr|Sc|Y|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Zr|Nb|Mo|Tc|Ru|Rh|Pd|Ag|Cd|Hf|Ta|W|Re|Os|Ir|Pt|Au|Hg|Rf|Db|Sg|Bh|Hs|Mt|Ds|Rg|Cn|Al|Ga|In|Sn|Tl|Pb|Bi|Nh|Fl|Mc|Lv|Po|B|Si|Ge|As|Sb|Te|At|Ts)\)?([0-9]{0,2}[.,]?[0-9]{0,})?){2,6}\(?(\(?O?H?H?\)?)?([0-9]{0,2}[.,]?[0-9]{0,})?\(?(((F|Cl|Br|I|O|S|Se|N|P|C|H|B|Si|Ge|As|Sb|Te|At|Ts|Se)([0-9]{0,2}[.,]?[0-9]{0,})?O([0-9]{0,2}[.,]?[0-9]{0,})?)|(F|Cl|Br|I|S|Se|B|Si|Ge|As|Sb|Te|At|Ts|Se|(\(?PW12O40\)?)|(\(?SiW12O40\)?)|((\(?PW11O39\)?)([0-9]{0,2}[.,]?[0-9]{0,})?)([0-9]{0,2}[.,]?[0-9]{0,})?\)?)([0-9]{0,2}[.,]?[0-9]{0,})?'
+mix_salt = r'^.*[\(\)].*$|^.*[A-Z][a-z]?[A-Z][a-z]?.*$|^.*[0-9][A-Z].*$'
+me_pnictide = r'(((\(?(Li|Na|K|Rb|Cs|Fr|Be|Mg|Ca|Sr|Ba|Ra|La|Ce|Pr|Nd|Pm|Sm|Eu|Gd|Tb|Dy|Ho|Er|Tm|Yb|Lu|Ac|Th|Pa|U|Np|Pu|Am|Cm|Bk|Cf|Es|Fm|Md|No|Lr|Sc|Y|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Zr|Nb|Mo|Tc|Ru|Rh|Pd|Ag|Cd|Hf|Ta|W|Re|Os|Ir|Pt|Au|Hg|Rf|Db|Sg|Bh|Hs|Mt|Ds|Rg|Cn|Al|Ga|In|Sn|Tl|Pb|Bi|Nh|Fl|Mc|Lv|Po|B|Si|Ge|As|Sb|Te|At|Ts)\)?([0-9]{0,2}[.,]?[0-9]{0,})?\(?)([0-9]{0,2}[.,]?[0-9]{0,})?)+(N|P|As|Sb|Bi)?\)?([0-9]{0,2}[.,]?[0-9]{0,})?\)?([0-9]{0,2}[.,]?[0-9]{0,})?)+'
 
 bime = r'\(?' + (f'({All_metals})' + num)*2 + r'\)?' + num
 
@@ -44,9 +47,35 @@ qme = r'\(?' + (f'({All_metals})' + num)*4 + r'\)?' + num
 
 pentame = r'\(?' + (f'({All_metals})' + num)*5 + r'\)?' + num
 
-carbide = r'\(?' + f'({All_metals})' + num + 'C' + num + r'\)?'
+carbide = r'(\(?(Li|Na|K|Rb|Cs|Fr|Be|Mg|Ca|Sr|Ba|Ra|La|Ce|Pr|Nd|Pm|Sm|Eu|Gd|Tb|Dy|Ho|Er|Tm|Yb|Lu|Ac|Th|Pa|U|Np|Pu|Am|Cm|Bk|Cf|Es|Fm|Md|No|Lr|Sc|Y|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Zr|Nb|Mo|Tc|Ru|Rh|Pd|Ag|Cd|Hf|Ta|W|Re|Os|Ir|Pt|Au|Hg|Rf|Db|Sg|Bh|Hs|Mt|Ds|Rg|Cn|Al|Ga|In|Sn|Tl|Pb|Bi|Nh|Fl|Mc|Lv|Po|B|Si|Ge|As|Sb|Te|At|Ts)+([0-9]{0,2}[.,]?[0-9]{0,})?\)?\(?([0-9]{0,2}[.,]?[0-9]{0,})?\)?([0-9]{0,2}[.,]?[0-9]{0,})?)C([0-9]{0,2}[.,]?[0-9]{0,})?'
 
 nitride = r'\(?' + f'({All_metals})' + num + 'N' + num + r'\)?'
 phosphide = r'\(?' + f'({All_metals})' + num + 'P' + num + r'\)?'
 
-comp = r'((([A-Z][a-z]?)(\d*\.?\d*)?)+[-\/–@](([A-Z][a-z]?)(\d*\.?\d*)?)+(-|\/|–|@)?(([A-Z][a-z]?)(\d*\.?\d*)?)?+)+'
+intermetallic = r'\(?' + f'({All_metals})' + num + r'\)?' + r'\(?' + f'({All_metals})' + num + r'\)?' + num + r'\(?' + f'({All_metals})?' + num + r'\)?' + num + r'\(?' + f'({All_metals})?' + num + r'\)?' + num + r'\(?' + f'({All_metals})?' + num + r'\)?' + num
+
+comp = r'(\(?[A-Z][a-z]?(\d*\.?\d*)?\)?(\d*\.?\d*)?)+([-\/–@](\(?[A-Z][a-z]?(\d*\.?\d*)?\)?(\d*\.?\d*)?)+)+'
+
+borocarbide = r'.*B.*C.*'
+
+boronitride = r'.*B.*N.*'
+
+kesterite = r'^.*Cu.*Zn.*Sn.*[SOSeTe].*$'
+
+complex_chalcogenide = r'^([A-Z][a-z]?_?[0-9.]*){2,}\(?[SOSeTe].*$'
+
+complex_halogenide = r'^.*((I|Cl|Br|F)\d?){2,}.*$'
+
+carbonate = r'^.+CO3.*$'
+
+carbide_halogenide = r'^.*C\d+.*(I|Cl|Br|F)+.*$'
+
+intermetallic_carbide = r'^.*[A-Z][a-z]?.*[^-\/@]C(\d+|[A-Z]|$|\)).*$'
+
+thiophosphate = r'^.*P.*S.*$'
+selenophosphate = r'^.*P.*Se.*$'
+chalcogen_halide = r'^.*[SOSe].*[IClBrF].*$'
+
+selenide_halide = r'^.*Se.*[IClBrF].*$'
+
+metallate = r'((Li|Na|K|Rb|Cs|Fr|Be|Mg|Ca|Sr|Ba|Ra|La|Ce|Pr|Nd|Pm|Sm|Eu|Gd|Tb|Dy|Ho|Er|Tm|Yb|Lu|Ac|Th|Pa|U|Np|Pu|Am|Cm|Bk|Cf|Es|Fm|Md|No|Lr|Sc|Y|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Zr|Nb|Mo|Tc|Ru|Rh|Pd|Ag|Cd|Hf|Ta|W|Re|Os|Ir|Pt|Au|Hg|Rf|Db|Sg|Bh|Hs|Mt|Ds|Rg|Cn|Al|Ga|In|Sn|Tl|Pb|Bi|Nh|Fl|Mc|Lv|Po|B|Si|Ge|As|Sb|Te|At|Ts)\d?)+\(?\[?(Li|Na|K|Rb|Cs|Fr|Be|Mg|Ca|Sr|Ba|Ra|La|Ce|Pr|Nd|Pm|Sm|Eu|Gd|Tb|Dy|Ho|Er|Tm|Yb|Lu|Ac|Th|Pa|U|Np|Pu|Am|Cm|Bk|Cf|Es|Fm|Md|No|Lr|Sc|Y|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Zr|Nb|Mo|Tc|Ru|Rh|Pd|Ag|Cd|Hf|Ta|W|Re|Os|Ir|Pt|Au|Hg|Rf|Db|Sg|Bh|Hs|Mt|Ds|Rg|Cn|Al|Ga|In|Sn|Tl|Pb|Bi|Nh|Fl|Mc|Lv|Po|B|Si|Ge|As|Sb|Te|At|Ts)(O|S|CN|Cl|Br|I|F|OH|NO3).+'
